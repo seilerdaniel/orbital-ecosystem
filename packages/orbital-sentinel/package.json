@@ -2,7 +2,7 @@
   "name": "@orbital/sentinel",
   "version": "0.1.0",
   "private": true,
-  "description": "Validation and policy checks for Orbital ecosystem events.",
+  "description": "Validation and policy checks, AgentShield diff scanning, and RDD receipts for Orbital ecosystem events.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -11,6 +11,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./service": {
+      "types": "./dist/service/index.d.ts",
+      "default": "./dist/service/index.js"
     }
   },
   "files": [
@@ -19,9 +23,14 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/service/index.js",
     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\""
   },
   "dependencies": {
-    "@orbital/bridge": "workspace:*"
+    "@orbital/bridge": "workspace:*",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
   }
 }

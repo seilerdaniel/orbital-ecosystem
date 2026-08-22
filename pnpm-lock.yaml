@@ -71,8 +71,29 @@ importers:
       '@orbital/bridge':
         specifier: workspace:*
         version: link:../orbital-bridge
+      ws:
+        specifier: ^8.21.3
+        version: 8.21.3
+    devDependencies:
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
 
-  packages/orbital-synapse: {}
+  packages/orbital-synapse:
+    dependencies:
+      '@orbital/bridge':
+        specifier: workspace:*
+        version: link:../orbital-bridge
+      '@orbital/sentinel':
+        specifier: workspace:*
+        version: link:../orbital-sentinel
+      ws:
+        specifier: ^8.21.3
+        version: 8.21.3
+    devDependencies:
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
 
   packages/orbital-vault: {}
 

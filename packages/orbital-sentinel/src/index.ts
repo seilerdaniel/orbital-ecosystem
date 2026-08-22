@@ -1,55 +1,39 @@
-import { isOrbitalEvent, OrbitalEventTypes, type AnyOrbitalEvent } from "@orbital/bridge";
-
-export interface SentinelViolation {
-  readonly code: "invalid-envelope" | "unknown-type" | "future-timestamp";
-  readonly message: string;
-}
-
-export interface SentinelReport {
-  readonly valid: boolean;
-  readonly violations: readonly SentinelViolation[];
-}
-
 /**
- * Validates OrbitalEvent envelopes before they are persisted or forwarded.
- * Deliberately stateless: compose policies at the call site.
+ * @orbital/sentinel — QA auditor for the Orbital ecosystem.
+ *
+ * Library surface (this barrel): event contract validation, the AgentShield
+ * diff scanner, and the RDD receipt generator. The long-running audit
+ * service lives behind the `./service` subpath so library consumers do not
+ * need the WebSocket transport.
  */
-export class Sentinel {
-  /** Maximum allowed clock skew (ms) between emitter and validator. */
-  private readonly maxClockSkewMs: number;
 
-  constructor(maxClockSkewMs = 5 * 60 * 1000) {
-    this.maxClockSkewMs = maxClockSkewMs;
-  }
+export {
+  Sentinel,
+  type SentinelReport,
+  type SentinelViolation
+} from "./sentinel.js";
 
-  inspect(candidate: unknown): SentinelReport {
-    const violations: SentinelViolation[] = [];
+export {
+  AgentShield,
+  type DiffFile,
+  type ShieldFinding,
+  type ShieldReport,
+  type ShieldSeverity
+} from "./scanners/agent-shield.js";
 
-    if (!isOrbitalEvent(candidate)) {
-      return {
-        valid: false,
-        violations: [
-          { code: "invalid-envelope", message: "Value does not satisfy the OrbitalEvent contract" }
-        ]
-      };
-    }
-
-    const event = candidate as AnyOrbitalEvent;
-
-    if (!(OrbitalEventTypes as readonly string[]).includes(event.type)) {
-      violations.push({
-        code: "unknown-type",
-        message: `Event type "${event.type}" is not part of the well-known catalog`
-      });
-    }
-
-    if (Date.parse(event.occurredAt) > Date.now() + this.maxClockSkewMs) {
-      violations.push({
-        code: "future-timestamp",
-        message: `Event timestamp ${event.occurredAt} is too far in the future`
-      });
-    }
-
-    return { valid: violations.length === 0, violations };
-  }
-}
+export {
+  RECEIPT_FILE_NAME,
+  RECEIPT_SCHEMA_VERSION,
+  generateReceipt,
+  isRddReceipt,
+  readReceipt,
+  writeReceipt,
+  type GenerateReceiptOptions,
+  type ReceiptCandidate,
+  type ReceiptCheck,
+  type ReceiptCheckStatus,
+  type ReceiptEvidence,
+  type ReceiptShieldSummary,
+  type ReceiptVerdict,
+  type RDDReceipt
+} from "./receipt/generator.js";
