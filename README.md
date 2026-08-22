@@ -59,6 +59,38 @@ const event = createOrbitalEvent({
 Producers and consumers agree only on the envelope; transport (IPC, HTTP,
 message bus) is owned by bridge adapters.
 
+## Bridge server
+
+`@orbital/bridge` ships an executable server exposing the event bus locally:
+
+```bash
+pnpm --filter @orbital/bridge start   # http://localhost:4000
+```
+
+| Endpoint | Description |
+| --- | --- |
+| `WS /ws` | Live broadcast of every `OrbitalEvent` to connected clients |
+| `GET /health` | Liveness, uptime and counters |
+| `POST /api/events` | Validate + broadcast an `OrbitalEvent` (422 if invalid) |
+| `GET /api/fs?path=` | Read a file or list a directory inside the workspace root |
+| `POST /api/fs` | Create a file (`{ path, contents }`, 409 on duplicate) |
+| `PUT /api/fs` | Create or overwrite a file |
+| `DELETE /api/fs?path=[&recursive=true]` | Delete a file or directory |
+
+The `/api/fs` endpoints form the **Inverse MCP Bridge**: safe local CRUD for
+UI agents. Paths must be relative to the active project directory (cwd by
+default, override with `ORBITAL_BRIDGE_ROOT`) and `.git` / `node_modules`
+are always rejected. Client-facing paths are POSIX-style on every OS.
+
+Environment: `ORBITAL_BRIDGE_PORT` (default 4000), `ORBITAL_BRIDGE_HOST`
+(default loopback only).
+
+Manual verification suite (server must be running):
+
+```bash
+node packages/orbital-bridge/scripts/smoke.mjs
+```
+
 ## License
 
 [MIT](LICENSE)
