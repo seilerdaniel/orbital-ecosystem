@@ -49,7 +49,15 @@ importers:
         specifier: ^8.5.13
         version: 8.18.1
 
-  packages/orbital-cli: {}
+  packages/orbital-cli:
+    dependencies:
+      ws:
+        specifier: ^8.21.3
+        version: 8.21.3
+    devDependencies:
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
 
   packages/orbital-forge: {}
 
