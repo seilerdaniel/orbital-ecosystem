@@ -2,9 +2,13 @@
   "name": "@orbital/dock",
   "version": "0.1.0",
   "private": true,
-  "description": "Desktop control center application for the Orbital ecosystem.",
+  "description": "Desktop control center application for the Orbital ecosystem: live Space Control telemetry over the bridge event bus.",
   "license": "MIT",
   "type": "module",
+  "main": "./dist/main.js",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -14,6 +18,10 @@
   "dependencies": {
     "@orbital/bridge": "workspace:*",
     "@orbital/pulse": "workspace:*",
-    "@orbital/sentinel": "workspace:*"
+    "@orbital/sentinel": "workspace:*",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
   }
 }
