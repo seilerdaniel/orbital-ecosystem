@@ -13,11 +13,15 @@ import { Sentinel } from "@orbital/sentinel";
 import { BridgeLink } from "./bridge-link.js";
 import { Dashboard } from "./dashboard.js";
 import { TokenTelemetry } from "./telemetry.js";
+import { ContentFactory, MemoryPanel, SecurityRadar } from "./widgets.js";
 
 const sessionId = globalThis.crypto.randomUUID();
 const pulse = new Pulse();
 const sentinel = new Sentinel();
 const telemetry = new TokenTelemetry();
+const radar = new SecurityRadar();
+const factory = new ContentFactory();
+const memory = new MemoryPanel();
 const dashboard = new Dashboard();
 let rejectedBySentinel = 0;
 
@@ -42,6 +46,9 @@ function handleEvent(event: AnyOrbitalEvent): void {
   }
 
   telemetry.observe(event);
+  radar.observe(event);
+  factory.observe(event);
+  memory.observe(event);
   dashboard.record(event);
 }
 
@@ -52,7 +59,10 @@ function paint(): void {
 
   dashboard.render(
     { ...stats, rejected: stats.rejected + rejectedBySentinel },
-    telemetry.snapshot()
+    telemetry.snapshot(),
+    radar.snapshot(),
+    factory.snapshot(),
+    memory.snapshot()
   );
 }
 

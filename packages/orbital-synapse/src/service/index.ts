@@ -9,7 +9,7 @@
  * idempotent (one pattern per receiptId).
  */
 
-import { isOrbitalEvent } from "@orbital/bridge";
+import { createOrbitalEvent, isOrbitalEvent } from "@orbital/bridge";
 import { isRddReceipt, readReceipt, type RDDReceipt } from "@orbital/sentinel";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -17,8 +17,7 @@ import { WebSocket } from "ws";
 
 import {
   VectorStore,
-  type MemoryRecord,
-  type StoredMemory
+  type MemoryRecord
 } from "../store/vector-db.js";
 
 export interface MemoryServiceOptions {
@@ -168,7 +167,7 @@ export class MemoryService {
       if (frame.type === "task.completed") {
         const payload = frame.payload as { taskId?: unknown };
 
-        this.capturePattern(payload.taskId).catch((error) => {
+        this.capturePattern(payload.taskId, frame.id).catch((error) => {
           console.error("[synapse] capture failed:", error);
         });
       }
@@ -199,7 +198,7 @@ export class MemoryService {
     }, delay);
   }
 
-  private async capturePattern(taskIdRaw: unknown): Promise<void> {
+  private async capturePattern(taskIdRaw: unknown, correlationId: string): Promise<void> {
     if (typeof taskIdRaw !== "string" || taskIdRaw.trim() === "") {
       return;
     }
@@ -250,10 +249,34 @@ export class MemoryService {
     };
 
     const id = this.store.insert(record);
-    const stored: StoredMemory | undefined = this.store.get(id);
 
     this.patternsStored += 1;
     console.log(`[synapse] stored pattern ${id} from receipt ${receipt.receiptId}`);
+
+    await this.publish(
+      createOrbitalEvent({
+        type: "memory.pattern.stored",
+        source: "synapse",
+        correlationId,
+        metadata: { taskId },
+        payload: {
+          patternId: id,
+          taskId,
+          receiptId: receipt.receiptId
+        }
+      })
+    );
+  }
+
+  /** Publishes an event back onto the bus through the same socket. */
+  private async publish(event: ReturnType<typeof createOrbitalEvent>): Promise<void> {
+    const socket = this.socket;
+
+    if (socket === undefined || socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    socket.send(JSON.stringify(event));
   }
 
   /** Receipt lookup: per-task directory first, then the shared root. */

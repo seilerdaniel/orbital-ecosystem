@@ -1,6 +1,6 @@
 {
   "name": "@orbital/dock",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Desktop control center application for the Orbital ecosystem: live Space Control telemetry over the bridge event bus.",
   "license": "MIT",

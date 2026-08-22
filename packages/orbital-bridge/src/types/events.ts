@@ -46,7 +46,8 @@ export const OrbitalEventTypes = [
   "health.reported",
   "policy.violated",
   "agent.completed",
-  "token.alert.raised"
+  "token.alert.raised",
+  "memory.pattern.stored"
 ] as const;
 
 export type OrbitalEventType = (typeof OrbitalEventTypes)[number];
@@ -126,6 +127,16 @@ export interface TokenAlertRaisedPayload {
 }
 
 /**
+ * Emitted by synapse after a verified pattern (approved RDD receipt) is
+ * consolidated into the memory store.
+ */
+export interface MemoryPatternStoredPayload {
+  readonly patternId: string;
+  readonly taskId: string;
+  readonly receiptId: string;
+}
+
+/**
  * Maps every event type to its strongly typed payload. Consumers get
  * exhaustive, compile-time-safe payloads via {@link TypedOrbitalEvent}.
  */
@@ -143,6 +154,7 @@ export interface OrbitalEventPayloadMap {
   "policy.violated": PolicyViolatedPayload;
   "agent.completed": AgentCompletedPayload;
   "token.alert.raised": TokenAlertRaisedPayload;
+  "memory.pattern.stored": MemoryPatternStoredPayload;
 }
 
 /** Primitive metadata values allowed on the envelope. */

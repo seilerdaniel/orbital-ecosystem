@@ -10,6 +10,11 @@
 import { type AnyOrbitalEvent, type TypedOrbitalEvent } from "@orbital/bridge";
 import type { BridgeLinkStats } from "./bridge-link.js";
 import type { TokenTelemetrySnapshot } from "./telemetry.js";
+import type {
+  ContentFactorySnapshot,
+  MemoryPanelSnapshot,
+  SecurityRadarSnapshot
+} from "./widgets.js";
 
 export interface DashboardOptions {
   /** Maximum entries kept in the visible feed. */
@@ -35,12 +40,17 @@ const GREEN = "\x1b[32m";
 const YELLOW = "\x1b[33m";
 const RED = "\x1b[31m";
 const CYAN = "\x1b[36m";
+const NEON_RED = "\x1b[91m";
+const NEON_MAGENTA = "\x1b[95m";
 const CLEAR_SCREEN_DOWN = "\x1b[J";
 
-function line(left: string, right: string): string {
-  const space = FRAME_WIDTH - 4 - left.length - right.length;
+const DOCK_VERSION = "0.4.0";
 
-  return `│ ${left}${" ".repeat(Math.max(space, 1))}${right} │`;
+function line(left: string, right: string): string {
+  // Pad by VISIBLE width: counting ANSI escape bytes would misalign rows.
+  const space = Math.max(FRAME_WIDTH - 4 - rawLength(left) - rawLength(right), 1);
+
+  return `│ ${left}${" ".repeat(space)}${right} │`;
 }
 
 /** Human-readable one-liner for any event in the contract. */
@@ -92,6 +102,11 @@ export function summarizeEvent(event: AnyOrbitalEvent): string {
 
       return `${payload.provider}/${payload.model} ${payload.totalTokens}t >= threshold ${payload.thresholdTokens}t`;
     }
+    case "memory.pattern.stored": {
+      const payload = (event as TypedOrbitalEvent<"memory.pattern.stored">).payload;
+
+      return `task=${payload.taskId} receipt=${payload.receiptId.slice(0, 8)}…`;
+    }
     default:
       return "";
   }
@@ -100,6 +115,10 @@ export function summarizeEvent(event: AnyOrbitalEvent): string {
 function colorFor(type: string): string {
   if (type === "token.alert.raised" || type === "task.failed" || type === "policy.violated") {
     return RED;
+  }
+
+  if (type === "memory.pattern.stored") {
+    return NEON_MAGENTA;
   }
 
   if (type === "agent.completed") {
@@ -155,12 +174,18 @@ export class Dashboard {
     }
   }
 
-  render(link: BridgeLinkStats, telemetry: TokenTelemetrySnapshot): void {
+  render(
+    link: BridgeLinkStats,
+    telemetry: TokenTelemetrySnapshot,
+    radar: SecurityRadarSnapshot,
+    factory: ContentFactorySnapshot,
+    memory: MemoryPanelSnapshot
+  ): void {
     const uptimeSeconds = Math.round((Date.now() - this.startedAt) / 1000);
     const out: string[] = [];
 
     out.push("┌" + "─".repeat(FRAME_WIDTH - 2) + "┐");
-    out.push(line(`ORBITAL DOCK · SPACE CONTROL`, `uptime ${uptimeSeconds}s`));
+    out.push(line(`ORBITAL DOCK · SPACE CONTROL v${DOCK_VERSION}`, `uptime ${uptimeSeconds}s`));
     out.push("├" + "─".repeat(FRAME_WIDTH - 2) + "┤");
 
     const linkState = link.connected
@@ -175,6 +200,76 @@ export class Dashboard {
       )
     );
 
+    // --- Security Breach Radar (sentinel) --------------------------------
+    out.push("├" + "─".repeat(FRAME_WIDTH - 2) + "┤");
+
+    const breach = radar.last;
+
+    if (breach === undefined) {
+      out.push(line(`${BOLD}SECURITY RADAR${RESET}`, ""));
+      out.push(row(`${DIM}no breaches detected${RESET}`));
+    } else {
+      out.push(
+        line(
+          `${NEON_RED}${BOLD}⚠ SECURITY RADAR — BREACH DETECTED${RESET}`,
+          `${NEON_RED}${radar.breaches} total${RESET}`
+        )
+      );
+
+      const severity =
+        breach.severity === undefined ? "" : ` ${NEON_RED}[${breach.severity}]${RESET}`;
+
+      // Clip plain text BEFORE wrapping in ANSI so escapes can never be cut.
+      const plainHead = clip(
+        `▲ policy=${breach.policy} via ${breach.source}`,
+        FRAME_WIDTH - 18
+      );
+
+      out.push(row(`${NEON_RED}${BOLD}${plainHead}${RESET}${severity}`));
+      out.push(row(`${RED}└─ ${clip(breach.detail, FRAME_WIDTH - 12)}${RESET}`));
+    }
+
+    // --- Content Factory feed (forge) ------------------------------------
+    out.push("├" + "─".repeat(FRAME_WIDTH - 2) + "┤");
+    out.push(line(`${BOLD}CONTENT FACTORY · FORGE${RESET}`, `${factory.builds} rendered`));
+
+    if (factory.recent.length === 0) {
+      out.push(row(`${DIM}waiting for content renders…${RESET}`));
+    } else {
+      for (const artifact of factory.recent.slice(-3)) {
+        const at = artifact.at.toISOString().slice(11, 19);
+        const label = FACTORY_LABEL[artifact.kind];
+        const nameTint = artifact.kind === "artifact" ? YELLOW : CYAN;
+        const emphasis = label === undefined ? "" : BOLD;
+        const name = clip(artifact.name, 40);
+
+        out.push(
+          row(
+            `${DIM}${at}${RESET}  ${nameTint}${emphasis}✦ ${name}${RESET}${
+              label === undefined ? "" : ` ${DIM}${label}${RESET}`
+            }`
+          )
+        );
+      }
+    }
+
+    // --- Global Memory (synapse) -----------------------------------------
+    out.push("├" + "─".repeat(FRAME_WIDTH - 2) + "┤");
+    out.push(line(`${BOLD}GLOBAL MEMORY · SYNAPSE${RESET}`, `${memory.patterns} patterns`));
+
+    if (memory.last === undefined) {
+      out.push(row(`${DIM}no verified patterns consolidated yet${RESET}`));
+    } else {
+      const last = memory.last;
+      const at = last.at.toISOString().slice(11, 19);
+
+      out.push(
+        row(
+          `${DIM}${at}${RESET}  ${NEON_MAGENTA}✓ pattern stored${RESET} task=${last.taskId} ${DIM}receipt=${last.receiptId.slice(0, 8)}…${RESET}`
+        )
+      );
+    }
+
     out.push("├" + "─".repeat(FRAME_WIDTH - 2) + "┤");
     out.push(line(`${BOLD}LIVE EVENT FEED${RESET}`, ""));
 
@@ -186,9 +281,15 @@ export class Dashboard {
       const time = entry.at.toISOString().slice(11, 19);
       const badge = colorFor(entry.type);
       const marker = entry.invalid ? `${RED}✗${RESET} ` : "";
-      const text = `${marker}${badge}${entry.type}${RESET} ${DIM}${entry.source}${RESET} ${entry.summary}`;
+      // Keep the row inside the frame: clip the summary to whatever the
+      // frame (14) + markers + type + source + separators leave, minus one
+      // column so the minimum 1-space padding never overflows.
+      const fixedCost =
+        17 + (entry.invalid ? 2 : 0) + entry.type.length + entry.source.length;
+      const summary = clip(entry.summary, Math.max(FRAME_WIDTH - fixedCost, 8));
+      const text = `${marker}${badge}${entry.type}${RESET} ${DIM}${entry.source}${RESET} ${summary}`;
 
-      out.push(`│ ${DIM}${time}${RESET}  ${text}` + " ".repeat(Math.max(FRAME_WIDTH - 12 - rawLength(text), 1)) + " │");
+      out.push(`│ ${DIM}${time}${RESET}  ${text}` + " ".repeat(Math.max(FRAME_WIDTH - 14 - rawLength(text), 1)) + " │");
     }
 
     out.push("├" + "─".repeat(FRAME_WIDTH - 2) + "┤");
@@ -236,4 +337,20 @@ export class Dashboard {
 /** Visible length ignoring ANSI escape sequences (for padding math). */
 function rawLength(value: string): number {
   return value.replace(/\x1b\[[0-9;]*m/g, "").length;
+}
+
+/** Clips visible text to maxLen (ANSI-safe: strips before measuring). */
+function clip(value: string, maxLen: number): string {
+  return rawLength(value) <= maxLen ? value : `${value.slice(0, Math.max(maxLen - 1, 1))}…`;
+}
+
+const FACTORY_LABEL: Record<string, string> = {
+  "release-notes": "release notes",
+  "demo-script": "demo script",
+  "montage-project": "openmontage project"
+};
+
+/** Full-width frame row with ANSI-safe padding. */
+function row(content: string): string {
+  return `│ ${content}` + " ".repeat(Math.max(FRAME_WIDTH - 4 - rawLength(content), 1)) + " │";
 }
