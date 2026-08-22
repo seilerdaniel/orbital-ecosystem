@@ -1,0 +1,21 @@
+{
+  "name": "@orbital/cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Command line interface for the Orbital ecosystem.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/cli.js",
+  "types": "./dist/cli.d.ts",
+  "bin": {
+    "orbital": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\""
+  }
+}
