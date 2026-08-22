@@ -51,6 +51,18 @@ importers:
 
   packages/orbital-cli:
     dependencies:
+      '@orbital/forge':
+        specifier: workspace:*
+        version: link:../orbital-forge
+      '@orbital/sentinel':
+        specifier: workspace:*
+        version: link:../orbital-sentinel
+      '@orbital/synapse':
+        specifier: workspace:*
+        version: link:../orbital-synapse
+      '@orbital/vault':
+        specifier: workspace:*
+        version: link:../orbital-vault
       ws:
         specifier: ^8.21.3
         version: 8.21.3

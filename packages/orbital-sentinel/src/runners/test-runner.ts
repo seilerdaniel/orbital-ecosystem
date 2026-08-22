@@ -38,6 +38,8 @@ export interface PreFlightOptions {
   readonly runnerOverride?: RunnerKind;
   /** Hard cap per run; defaults to 120s. */
   readonly timeoutMs?: number;
+  /** Streams raw child output chunks as they arrive (CLI passthrough). */
+  readonly onOutput?: (chunk: string) => void;
 }
 
 export interface PreFlightStats {
@@ -246,7 +248,8 @@ function execCapture(
   command: string,
   args: readonly string[],
   cwd: string,
-  timeoutMs: number
+  timeoutMs: number,
+  onOutput: ((chunk: string) => void) | undefined
 ): Promise<SpawnOutcome> {
   return new Promise((resolvePromise) => {
     const child = spawn(command, [...args], {
@@ -262,10 +265,16 @@ function execCapture(
     const timer = setTimeout(() => child.kill(), timeoutMs);
 
     child.stdout?.on("data", (chunk) => {
-      stdout += String(chunk);
+      const text = String(chunk);
+
+      stdout += text;
+      onOutput?.(text);
     });
     child.stderr?.on("data", (chunk) => {
-      stderr += String(chunk);
+      const text = String(chunk);
+
+      stderr += text;
+      onOutput?.(text);
     });
 
     child.on("error", (error) => {
@@ -283,7 +292,8 @@ function execCapture(
 async function runStrategy(
   runner: RunnerKind,
   targetRoot: string,
-  timeoutMs: number
+  timeoutMs: number,
+  onOutput: ((chunk: string) => void) | undefined
 ): Promise<{ outcome: SpawnOutcome; counts: TestCounts }> {
   const pm = packageManagerFor(targetRoot);
   let command = pm;
@@ -303,7 +313,7 @@ async function runStrategy(
     }
   }
 
-  const outcome = await execCapture(command, args, targetRoot, timeoutMs);
+  const outcome = await execCapture(command, args, targetRoot, timeoutMs, onOutput);
   const combined = `${outcome.stdout}\n${outcome.stderr}`;
   const counts =
     runner === "npm-test"
@@ -330,6 +340,7 @@ export class PreFlightRunner {
   private readonly intervalMs: number | undefined;
   private readonly runnerOverride: RunnerKind | undefined;
   private readonly timeoutMs: number;
+  private readonly onOutput: ((chunk: string) => void) | undefined;
 
   private socket: WebSocket | undefined;
   private reconnectTimer: Timer | undefined;
@@ -356,6 +367,7 @@ export class PreFlightRunner {
       options.timeoutMs ??
       readNumberEnv("ORBITAL_PREFLIGHT_TIMEOUT_MS") ??
       DEFAULT_TIMEOUT_MS;
+    this.onOutput = options.onOutput;
   }
 
   start(): void {
@@ -382,10 +394,69 @@ export class PreFlightRunner {
       return;
     }
 
-    this.running = true;
     void this.runOnce().catch((error) => {
       console.error("[sentinel] pre-flight run failed:", error);
     });
+  }
+
+  /**
+   * Runs one suite and resolves with its parsed result (or undefined when
+   * a run is already in flight). Used directly by CLI consumers.
+   */
+  async runOnce(): Promise<TestRunResult | undefined> {
+    if (this.running || this.closing) {
+      return undefined;
+    }
+
+    this.running = true;
+
+    try {
+      const startedAt = Date.now();
+      const runner = this.runnerOverride ?? (await detectRunner(this.targetRoot));
+
+      const { outcome, counts } = await runStrategy(
+        runner,
+        this.targetRoot,
+        this.timeoutMs,
+        this.onOutput
+      );
+
+      const result: TestRunResult = {
+        runner,
+        passed: counts.passed,
+        failed: counts.failed,
+        total: counts.total,
+        durationMs: Date.now() - startedAt,
+        ok: counts.failed === 0 && counts.total > 0 && outcome.code === 0
+      };
+
+      this.last = result;
+      this.runsCompleted += 1;
+
+      console.log(
+        `[sentinel] pre-flight ${result.ok ? "OK" : "FAIL"} (${runner}): ${result.passed} passed, ${result.failed} failed of ${result.total}`
+      );
+
+      await this.publish(
+        createOrbitalEvent({
+          type: "preflight.reported",
+          source: "sentinel",
+          metadata: { runner, ok: result.ok },
+          payload: {
+            project: await projectNameFor(this.targetRoot),
+            runner,
+            passed: result.passed,
+            failed: result.failed,
+            total: result.total,
+            durationMs: result.durationMs
+          }
+        })
+      );
+
+      return result;
+    } finally {
+      this.running = false;
+    }
   }
 
   stats(): PreFlightStats {
@@ -421,49 +492,6 @@ export class PreFlightRunner {
     }
 
     socket.terminate();
-  }
-
-  private async runOnce(): Promise<void> {
-    const startedAt = Date.now();
-    const runner = this.runnerOverride ?? (await detectRunner(this.targetRoot));
-
-    try {
-      const { outcome, counts } = await runStrategy(runner, this.targetRoot, this.timeoutMs);
-
-      const result: TestRunResult = {
-        runner,
-        passed: counts.passed,
-        failed: counts.failed,
-        total: counts.total,
-        durationMs: Date.now() - startedAt,
-        ok: counts.failed === 0 && counts.total > 0 && outcome.code === 0
-      };
-
-      this.last = result;
-      this.runsCompleted += 1;
-
-      console.log(
-        `[sentinel] pre-flight ${result.ok ? "OK" : "FAIL"} (${runner}): ${result.passed} passed, ${result.failed} failed of ${result.total}`
-      );
-
-      await this.publish(
-        createOrbitalEvent({
-          type: "preflight.reported",
-          source: "sentinel",
-          metadata: { runner, ok: result.ok },
-          payload: {
-            project: await projectNameFor(this.targetRoot),
-            runner,
-            passed: result.passed,
-            failed: result.failed,
-            total: result.total,
-            durationMs: result.durationMs
-          }
-        })
-      );
-    } finally {
-      this.running = false;
-    }
   }
 
   private async publish(event: ReturnType<typeof createOrbitalEvent>): Promise<void> {

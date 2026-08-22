@@ -1,27 +1,24 @@
 /**
- * Interactive step-by-step wizard: monorepo health, Sentinel/Pulse event
- * listing, and the verification suite. Plain readline — no TUI deps.
+ * Interactive step-by-step wizard exposing the whole monorepo: ecosystem
+ * health + vault state, Pre-Flight test runs, Forge content generation,
+ * and the live bridge event tail. Plain readline — no TUI deps.
  */
 
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 
-import {
-  checkEcosystem,
-  renderHealthReport
-} from "./health.js";
-import {
-  collectRecentEvents,
-  formatTailEvent
-} from "./events-tail.js";
-import { runVerification } from "./tests.js";
+import { checkEcosystem, renderHealthReport } from "./health.js";
+import { collectRecentEvents, formatTailEvent } from "./events-tail.js";
+import { forgeGenerate, preFlightRun, vaultList, vaultStatus } from "./actions.js";
 
 const MENU = `
 === Orbital wizard ===
 
- 1) Monorepo health check (bridge / pulse / packages)
- 2) List recent Sentinel/Pulse events (live tail)
- 3) Run verification (tests + typecheck)
+ 1) Ecosystem health & vault status
+ 2) Run Pre-Flight tests
+ 3) Generate releases & demos (Forge)
+ 4) Listen to live events (WS tail)
+ v) List vault keys
  0) Exit
 `;
 
@@ -35,21 +32,31 @@ export async function runWizard(): Promise<number> {
 
       switch (answer) {
         case "1": {
-          await healthStep();
+          await healthAndVaultStep();
           break;
         }
         case "2": {
-          await eventsStep(rl);
+          await preflightStep(rl);
           break;
         }
         case "3": {
-          verificationStep();
+          await forgeStep(rl);
+          break;
+        }
+        case "4": {
+          await eventsStep(rl);
+          break;
+        }
+        case "v":
+        case "V": {
+          await vaultList();
           break;
         }
         case "0":
         case "q":
         case "exit": {
           console.log("Bye.");
+
           return 0;
         }
         default: {
@@ -62,32 +69,61 @@ export async function runWizard(): Promise<number> {
   }
 }
 
-async function healthStep(): Promise<void> {
+async function healthAndVaultStep(): Promise<void> {
   console.log("Probing services...");
-  const report = renderHealthReport(await checkEcosystem());
+  console.log(renderHealthReport(await checkEcosystem()));
+  console.log("");
+  await vaultStatus();
+}
 
-  console.log(report);
+async function preflightStep(rl: ReturnType<typeof createInterface>): Promise<void> {
+  const target = (await rl.question(`Target directory (default ${process.cwd()}): `)).trim();
+
+  const result = await preFlightRun(target === "" ? process.cwd() : target);
+
+  if (!result.ok) {
+    console.log(`Pre-Flight did not pass: ${result.message}`);
+  }
+}
+
+async function forgeStep(rl: ReturnType<typeof createInterface>): Promise<void> {
+  const title = (await rl.question("Release title (blank = today's date): ")).trim();
+  const outDir = (await rl.question(`Output directory (default ./forge-out): `)).trim();
+
+  const result = await forgeGenerate({
+    ...(title === "" ? {} : { title }),
+    ...(outDir === "" ? {} : { outDir }),
+    repoRoot: process.cwd()
+  });
+
+  if (!result.ok) {
+    console.log(`Forge render failed: ${result.message}`);
+  }
 }
 
 async function eventsStep(rl: ReturnType<typeof createInterface>): Promise<void> {
   const scope = (
-    await rl.question("Scope [s]entinel / [p]ulse / [a]ll (default s+p): ")
+    await rl.question("Scope [s]entinel / [p]ulse / [f]orge / [y]napse / [a]ll (default all): ")
   )
     .trim()
     .toLowerCase();
 
   const sources =
-    scope === "a" || scope === "all"
-      ? ["dock", "mobile", "cli", "bridge", "vault", "pulse", "forge", "sentinel", "synapse"]
+    scope === "s"
+      ? ["sentinel"]
       : scope === "p"
         ? ["pulse"]
-        : scope === "s"
-          ? ["sentinel"]
-          : ["sentinel", "pulse"];
+        : scope === "f"
+          ? ["forge"]
+          : scope === "y"
+            ? ["synapse"]
+            : ["dock", "mobile", "cli", "bridge", "vault", "pulse", "forge", "sentinel", "synapse"];
 
   const seconds = Number((await rl.question("Listen seconds (default 5): ")).trim()) || 5;
 
-  console.log(`Tailing ws://127.0.0.1:4000/ws for ${seconds}s (sources: ${sources.join(", ")})...`);
+  console.log(
+    `Tailing ws://127.0.0.1:4000/ws for ${seconds}s (sources: ${sources.join(", ")})...`
+  );
 
   const events = await collectRecentEvents({
     sources,
@@ -96,24 +132,4 @@ async function eventsStep(rl: ReturnType<typeof createInterface>): Promise<void>
   });
 
   console.log(events.length === 0 ? "No matching events observed." : `${events.length} event(s).`);
-}
-
-function verificationStep(): void {
-  console.log("Running tests (--if-present) and the workspace typecheck...");
-
-  const results = runVerification();
-
-  for (const result of results) {
-    console.log(`${result.ok ? "[ok]" : "[FAIL]"} $ ${result.command}`);
-
-    if (result.detail !== "") {
-      console.log(result.detail.split(/\r?\n/).map((line) => `    ${line}`).join("\n"));
-    }
-  }
-
-  console.log(
-    results.every((result) => result.ok)
-      ? "Verification: GREEN"
-      : "Verification: FAILED (see steps above)"
-  );
 }
