@@ -91,6 +91,48 @@ Manual verification suite (server must be running):
 node packages/orbital-bridge/scripts/smoke.mjs
 ```
 
+## OmniRoute gateway (pulse)
+
+`@orbital/pulse` ships an OpenAI-compatible local proxy that routes each
+request to the right provider tier and reports completions to the bridge:
+
+```bash
+pnpm --filter @orbital/pulse start   # http://localhost:4001/v1
+```
+
+| Endpoint | Description |
+| --- | --- |
+| `POST /v1/chat/completions` | OpenAI-compatible chat completion with task-aware routing |
+| `GET /v1/models` | Aggregated model catalog across providers |
+| `GET /health` | Liveness, token counters and bridge link status |
+
+**Task-aware routing**: requests are classified into tiers — mechanical work
+(linting, formatting, docs) goes to fast/free models, deep work
+(architecture, DB, refactors) to frontier models. Override per request with
+the `x-orbital-tier: fast|frontier` header or an `orbital_tier` field in the
+body, or pin a concrete model via `model`.
+
+**Automatic fallback**: providers are tried in priority order; rate limits
+(429), server faults (5xx), timeouts and network errors fail over to the
+next provider transparently. Attempts are reported in the
+`x-orbital-fallback-attempts` response header.
+
+**Event bus integration**: every served request emits `agent.completed`
+(tokens, provider, model, duration) through the bridge WebSocket, plus
+`token.alert.raised` when usage crosses `ORBITAL_TOKEN_ALERT_THRESHOLD`.
+
+Environment: `ORBITAL_PULSE_PORT` (default 4001), `ORBITAL_PULSE_PROVIDERS`
+(JSON array overriding built-ins), `ORBITAL_BRIDGE_WS_URL`,
+`ORBITAL_PULSE_TIMEOUT_MS`, `ORBITAL_TOKEN_ALERT_THRESHOLD`. Built-in
+providers activate when their API key env var exists (`GROQ_API_KEY`,
+`OPENROUTER_API_KEY`) or are keyless local runtimes (Ollama).
+
+Verification suite (spins up its own mock providers):
+
+```bash
+node packages/orbital-pulse/scripts/run.mjs   # requires bridge + gateway running
+```
+
 ## License
 
 [MIT](LICENSE)

@@ -2,7 +2,7 @@
   "name": "@orbital/pulse",
   "version": "0.1.0",
   "private": true,
-  "description": "Event bus for the Orbital ecosystem: typed publish/subscribe over OrbitalEvent envelopes.",
+  "description": "Typed publish/subscribe bus plus the OmniRoute proxy gateway with task-aware routing and token telemetry for the Orbital ecosystem.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -11,6 +11,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "default": "./dist/server/index.js"
     }
   },
   "files": [
@@ -19,9 +23,14 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/server/index.js",
     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\""
   },
   "dependencies": {
-    "@orbital/bridge": "workspace:*"
+    "@orbital/bridge": "workspace:*",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
   }
 }

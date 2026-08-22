@@ -7,6 +7,7 @@ import {
   createOrbitalEvent,
   isOrbitalEvent,
   ORBITAL_EVENT_SCHEMA_VERSION,
+  type AnyOrbitalEvent,
   type OrbitalEvent
 } from "../types/events.js";
 import { SafeWorkspace, WorkspaceError } from "./workspace.js";
@@ -91,6 +92,25 @@ export function createBridgeServer(options: BridgeServerOptions = {}): BridgeSer
         workspaceRoot: workspace.root
       })
     );
+
+    client.on("message", (data) => {
+      // WS clients (pulse, dock, mobile) can ingest events directly on the
+      // bus: valid envelopes are relayed to everyone, anything else counts
+      // as rejected traffic. The original sender receives its own event
+      // back — publishers must tolerate their own echo.
+      try {
+        const parsed = JSON.parse(data.toString());
+
+        if (isOrbitalEvent(parsed)) {
+          eventsRelayed += 1;
+          broadcast(parsed as AnyOrbitalEvent);
+        } else {
+          eventsRejected += 1;
+        }
+      } catch {
+        eventsRejected += 1;
+      }
+    });
 
     client.on("error", (error) => {
       console.error("[bridge] websocket client error:", error.message);

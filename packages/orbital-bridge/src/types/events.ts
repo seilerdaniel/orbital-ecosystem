@@ -44,7 +44,9 @@ export const OrbitalEventTypes = [
   "vault.unlocked",
   "vault.locked",
   "health.reported",
-  "policy.violated"
+  "policy.violated",
+  "agent.completed",
+  "token.alert.raised"
 ] as const;
 
 export type OrbitalEventType = (typeof OrbitalEventTypes)[number];
@@ -99,6 +101,30 @@ export interface PolicyViolatedPayload {
   readonly detail: string;
 }
 
+/** Emitted by the pulse gateway after an LLM request finishes successfully. */
+export interface AgentCompletedPayload {
+  readonly requestId: string;
+  readonly provider: string;
+  readonly model: string;
+  /** Routing tier that served the request. */
+  readonly tier: "fast" | "frontier";
+  readonly durationMs: number;
+  readonly promptTokens: number;
+  readonly completionTokens: number;
+}
+
+/**
+ * Emitted when a provider's token consumption crosses the alert threshold.
+ * (Contract name for the gateway's TOKEN_USAGE_ALERT signal.)
+ */
+export interface TokenAlertRaisedPayload {
+  readonly requestId: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly totalTokens: number;
+  readonly thresholdTokens: number;
+}
+
 /**
  * Maps every event type to its strongly typed payload. Consumers get
  * exhaustive, compile-time-safe payloads via {@link TypedOrbitalEvent}.
@@ -115,6 +141,8 @@ export interface OrbitalEventPayloadMap {
   "vault.locked": VaultTransitionPayload;
   "health.reported": HealthReportedPayload;
   "policy.violated": PolicyViolatedPayload;
+  "agent.completed": AgentCompletedPayload;
+  "token.alert.raised": TokenAlertRaisedPayload;
 }
 
 /** Primitive metadata values allowed on the envelope. */
