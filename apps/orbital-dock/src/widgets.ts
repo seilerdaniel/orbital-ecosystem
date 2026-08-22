@@ -179,3 +179,63 @@ export class MemoryPanel {
     };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Pre-Flight suite health (sentinel test runner)
+// ---------------------------------------------------------------------------
+
+export interface PreflightRun {
+  readonly project: string;
+  readonly runner: string;
+  readonly passed: number;
+  readonly failed: number;
+  readonly total: number;
+  readonly durationMs: number;
+  readonly at: Date;
+}
+
+export interface PreflightPanelSnapshot {
+  readonly runs: number;
+  /** Undefined until the first suite lands; then failed === 0 && total > 0. */
+  readonly healthy: boolean | undefined;
+  readonly last: PreflightRun | undefined;
+}
+
+export class PreflightPanel {
+  private runs = 0;
+  private last: PreflightRun | undefined;
+
+  observe(event: AnyOrbitalEvent): boolean {
+    if (event.type !== "preflight.reported") {
+      return false;
+    }
+
+    const payload = (event as TypedOrbitalEvent<"preflight.reported">).payload;
+
+    this.runs += 1;
+    this.last = {
+      project: payload.project,
+      runner: payload.runner,
+      passed: payload.passed,
+      failed: payload.failed,
+      total: payload.total,
+      durationMs: payload.durationMs,
+      at: new Date()
+    };
+
+    return true;
+  }
+
+  snapshot(): PreflightPanelSnapshot {
+    const last = this.last;
+
+    return {
+      runs: this.runs,
+      healthy:
+        last === undefined
+          ? undefined
+          : last.failed === 0 && last.total > 0,
+      last: last === undefined ? undefined : { ...last }
+    };
+  }
+}

@@ -9,11 +9,16 @@
 
 import type { AnyOrbitalEvent } from "@orbital/bridge";
 import { Pulse } from "@orbital/pulse";
-import { Sentinel } from "@orbital/sentinel";
+import { PreFlightRunner, Sentinel } from "@orbital/sentinel";
 import { BridgeLink } from "./bridge-link.js";
 import { Dashboard } from "./dashboard.js";
 import { TokenTelemetry } from "./telemetry.js";
-import { ContentFactory, MemoryPanel, SecurityRadar } from "./widgets.js";
+import {
+  ContentFactory,
+  MemoryPanel,
+  PreflightPanel,
+  SecurityRadar
+} from "./widgets.js";
 
 const sessionId = globalThis.crypto.randomUUID();
 const pulse = new Pulse();
@@ -22,8 +27,20 @@ const telemetry = new TokenTelemetry();
 const radar = new SecurityRadar();
 const factory = new ContentFactory();
 const memory = new MemoryPanel();
+const preflight = new PreflightPanel();
 const dashboard = new Dashboard();
 let rejectedBySentinel = 0;
+
+// Pre-Flight: background test suite for the audited project; results land
+// back on the bus as preflight.reported and drive the health badge.
+const preflightRunner =
+  process.env.ORBITAL_PREFLIGHT_OFF === "1"
+    ? undefined
+    : new PreFlightRunner(
+        process.env.ORBITAL_PREFLIGHT_INTERVAL_MS === undefined
+          ? {}
+          : { intervalMs: Number(process.env.ORBITAL_PREFLIGHT_INTERVAL_MS) }
+      );
 
 // Remote frames re-enter through the same bus as local emissions, so any
 // in-dock subscriber observes one uniform OrbitalEvent stream.
@@ -49,6 +66,7 @@ function handleEvent(event: AnyOrbitalEvent): void {
   radar.observe(event);
   factory.observe(event);
   memory.observe(event);
+  preflight.observe(event);
   dashboard.record(event);
 }
 
@@ -62,7 +80,8 @@ function paint(): void {
     telemetry.snapshot(),
     radar.snapshot(),
     factory.snapshot(),
-    memory.snapshot()
+    memory.snapshot(),
+    preflight.snapshot()
   );
 }
 
@@ -84,6 +103,7 @@ async function shutdown(signal: string): Promise<void> {
   );
 
   await bridgeLink.close();
+  preflightRunner?.close();
   paint();
   console.log(`\n[dock] received ${signal}; Space Control offline.`);
   process.exit(0);
@@ -94,6 +114,7 @@ console.log("[dock] Space Control starting; connecting to orbital-bridge…");
 pulse.emit("session.started", "dock", { sessionId, actor: "local-user" });
 
 bridgeLink.start();
+preflightRunner?.start();
 setInterval(paint, 1_000).unref();
 paint();
 

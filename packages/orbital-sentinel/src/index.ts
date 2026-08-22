@@ -37,3 +37,14 @@ export {
   type ReceiptVerdict,
   type RDDReceipt
 } from "./receipt/generator.js";
+
+export {
+  PreFlightRunner,
+  parseJestJson,
+  parseSummaryText,
+  type PreFlightOptions,
+  type PreFlightStats,
+  type RunnerKind,
+  type TestCounts,
+  type TestRunResult
+} from "./runners/test-runner.js";

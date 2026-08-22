@@ -13,6 +13,7 @@ import type { TokenTelemetrySnapshot } from "./telemetry.js";
 import type {
   ContentFactorySnapshot,
   MemoryPanelSnapshot,
+  PreflightPanelSnapshot,
   SecurityRadarSnapshot
 } from "./widgets.js";
 
@@ -179,7 +180,8 @@ export class Dashboard {
     telemetry: TokenTelemetrySnapshot,
     radar: SecurityRadarSnapshot,
     factory: ContentFactorySnapshot,
-    memory: MemoryPanelSnapshot
+    memory: MemoryPanelSnapshot,
+    preflight: PreflightPanelSnapshot
   ): void {
     const uptimeSeconds = Math.round((Date.now() - this.startedAt) / 1000);
     const out: string[] = [];
@@ -268,6 +270,31 @@ export class Dashboard {
           `${DIM}${at}${RESET}  ${NEON_MAGENTA}✓ pattern stored${RESET} task=${last.taskId} ${DIM}receipt=${last.receiptId.slice(0, 8)}…${RESET}`
         )
       );
+    }
+
+    // --- Pre-Flight suite health (sentinel) -------------------------------
+    out.push("├" + "─".repeat(FRAME_WIDTH - 2) + "┤");
+
+    const run = preflight.last;
+
+    if (run === undefined) {
+      out.push(line(`${BOLD}PRE-FLIGHT · TESTS${RESET}`, `${DIM}not run yet${RESET}`));
+    } else if (preflight.healthy === true) {
+      out.push(line(`${BOLD}PRE-FLIGHT · TESTS${RESET}`, `${GREEN}${BOLD}● HEALTHY${RESET}`));
+    } else if (run.total === 0) {
+      out.push(line(`${BOLD}PRE-FLIGHT · TESTS${RESET}`, `${YELLOW}● NO COUNTS${RESET}`));
+    } else {
+      out.push(line(`${BOLD}PRE-FLIGHT · TESTS${RESET}`, `${NEON_RED}${BOLD}✗ FAILING${RESET}`));
+    }
+
+    if (run !== undefined) {
+      const at = run.at.toISOString().slice(11, 19);
+      const summary = clip(
+        `${at}  ${run.project} · ${run.runner} — ${run.passed}/${run.total} passed in ${(run.durationMs / 1000).toFixed(1)}s`,
+        FRAME_WIDTH - 8
+      );
+
+      out.push(row(summary));
     }
 
     out.push("├" + "─".repeat(FRAME_WIDTH - 2) + "┤");

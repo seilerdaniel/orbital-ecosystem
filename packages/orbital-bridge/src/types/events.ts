@@ -47,7 +47,8 @@ export const OrbitalEventTypes = [
   "policy.violated",
   "agent.completed",
   "token.alert.raised",
-  "memory.pattern.stored"
+  "memory.pattern.stored",
+  "preflight.reported"
 ] as const;
 
 export type OrbitalEventType = (typeof OrbitalEventTypes)[number];
@@ -137,6 +138,19 @@ export interface MemoryPatternStoredPayload {
 }
 
 /**
+ * Emitted after a Pre-Flight test suite finishes for an audited project.
+ * `ok` derives from failed === 0 && total > 0.
+ */
+export interface PreflightReportedPayload {
+  readonly project: string;
+  readonly runner: "vitest" | "jest" | "npm-test";
+  readonly passed: number;
+  readonly failed: number;
+  readonly total: number;
+  readonly durationMs: number;
+}
+
+/**
  * Maps every event type to its strongly typed payload. Consumers get
  * exhaustive, compile-time-safe payloads via {@link TypedOrbitalEvent}.
  */
@@ -155,6 +169,7 @@ export interface OrbitalEventPayloadMap {
   "agent.completed": AgentCompletedPayload;
   "token.alert.raised": TokenAlertRaisedPayload;
   "memory.pattern.stored": MemoryPatternStoredPayload;
+  "preflight.reported": PreflightReportedPayload;
 }
 
 /** Primitive metadata values allowed on the envelope. */
