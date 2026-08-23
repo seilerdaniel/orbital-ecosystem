@@ -4,8 +4,9 @@
  * the timeout with an ok HTTP status.
  */
 
-import { existsSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { dirname, join, normalize } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export interface ServiceHealth {
   readonly name: string;
@@ -57,7 +58,7 @@ async function probeService(
   }
 }
 
-/** Counts @orbital/* workspace packages whose dist output is present. */
+/** Counts @orbital/* workspace packages whose compiled entry output is present. */
 export function builtPackages(rootDir: string): { total: number; built: number } {
   const packagesDir = join(rootDir, "packages");
 
@@ -71,12 +72,27 @@ export function builtPackages(rootDir: string): { total: number; built: number }
   let built = 0;
 
   for (const entry of entries) {
-    if (existsSync(join(packagesDir, entry, "dist", "index.js"))) {
+    if (existsSync(join(packagesDir, entry, declaredEntry(packagesDir, entry)))) {
       built += 1;
     }
   }
 
   return { total, built };
+}
+
+/** Resolves the compiled entry file from package.json "main", defaulting to dist/index.js. */
+function declaredEntry(packagesDir: string, name: string): string {
+  const fallback = normalize("dist/index.js");
+
+  try {
+    const manifest = JSON.parse(
+      readFileSync(join(packagesDir, name, "package.json"), "utf8")
+    ) as { main?: string };
+
+    return typeof manifest.main === "string" ? normalize(manifest.main) : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 function readdirSafe(dir: string): string[] {
@@ -87,8 +103,37 @@ function readdirSafe(dir: string): string[] {
   }
 }
 
+const WORKSPACE_MARKER = "pnpm-workspace.yaml";
+
+/**
+ * Locates the monorepo root so `orbital status` reports accurate package
+ * counts regardless of the working directory pnpm runs the script from
+ * (filtered invocations execute with cwd set to the package directory).
+ */
+export function findMonorepoRoot(startDir: string = process.cwd()): string {
+  for (const origin of [startDir, dirname(fileURLToPath(import.meta.url))]) {
+    let current = origin;
+
+    while (true) {
+      if (existsSync(join(current, WORKSPACE_MARKER))) {
+        return current;
+      }
+
+      const parent = dirname(current);
+
+      if (parent === current) {
+        break;
+      }
+
+      current = parent;
+    }
+  }
+
+  return startDir;
+}
+
 export async function checkEcosystem(
-  rootDir: string = process.cwd()
+  rootDir: string = findMonorepoRoot()
 ): Promise<{ services: ServiceHealth[]; packages: { total: number; built: number } }> {
   const services = await Promise.all([
     probeService(
