@@ -113,6 +113,15 @@ export function summarizeEvent(event: AnyOrbitalEvent): string {
   }
 }
 
+function maskSecret(value: string): string {
+  // Mask common secret patterns: API keys, passwords, tokens, connection strings
+  const masked = value
+    .replace(/[a-zA-Z0-9]{32,}/g, "_".repeat(32)) // long alphanumeric strings (API keys, tokens)
+    .replace(/[a-zA-Z0-9]{24,}@[a-zA-Z0-9]/, "***@***") // email-like with token prefix
+    .replace(/(api[_-]?key|apikey|auth[_-]?token|password|secret)=[a-zA-Z0-9!@#$%^&*]+/i, "$1=***MASKED***")
+  return masked;
+}
+
 function colorFor(type: string): string {
   if (type === "token.alert.raised" || type === "task.failed" || type === "policy.violated") {
     return RED;
@@ -228,7 +237,7 @@ export class Dashboard {
       );
 
       out.push(row(`${NEON_RED}${BOLD}${plainHead}${RESET}${severity}`));
-      out.push(row(`${RED}└─ ${clip(breach.detail, FRAME_WIDTH - 12)}${RESET}`));
+      out.push(row(`${RED}└─ ${maskSecret(breach.detail)}${RESET}`));
     }
 
     // --- Content Factory feed (forge) ------------------------------------

@@ -29,7 +29,7 @@ export interface BridgeLinkStats {
 
 type Timer = ReturnType<typeof setTimeout>;
 
-const DEFAULT_URL = "ws://127.0.0.1:4000/ws";
+const DEFAULT_URL = "ws://localhost:4000/ws";
 const DEFAULT_RECONNECT_BASE_MS = 500;
 const DEFAULT_RECONNECT_MAX_MS = 8000;
 
