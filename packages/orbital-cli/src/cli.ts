@@ -184,9 +184,9 @@ export async function run(argv: readonly string[]): Promise<number> {
   switch (command) {
     case undefined: {
       if (stdin.isTTY) {
-        const { runWizard } = await import("./wizard.js");
+        const { runTUI } = await import("./tui.js");
 
-        return runWizard();
+        return runTUI();
       }
 
       console.log(HELP);

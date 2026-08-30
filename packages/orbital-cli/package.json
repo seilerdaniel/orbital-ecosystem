@@ -21,10 +21,12 @@
     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\""
   },
   "dependencies": {
+    "@inquirer/prompts": "^8.7.0",
     "@orbital/forge": "workspace:*",
     "@orbital/sentinel": "workspace:*",
     "@orbital/synapse": "workspace:*",
     "@orbital/vault": "workspace:*",
+    "picocolors": "^1.1.1",
     "ws": "^8.21.3"
   },
   "devDependencies": {
